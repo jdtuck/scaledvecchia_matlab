@@ -1,4 +1,3 @@
-function sv_test()
 %SV_TEST  Self-checks for the scaled-Vecchia implementation.
 %
 %   Verifies, on small problems where brute force is possible:
@@ -172,6 +171,7 @@ lpb = lpn; lpb(d+2) = lpb(d+2)-hh;
 gnu_fd = (sv_loglik(exp(lpa), y(ord), X(ord,:), locs(ord,:), NN, act2, jitter, false) - ...
           sv_loglik(exp(lpb), y(ord), X(ord,:), locs(ord,:), NN, act2, jitter, false)) / (2*hh);
 relnu = abs(gg(d+2) - gnu_fd) / max(1, abs(gnu_fd));
+assert(relnu < 1e-4)
 report('smoothness score matches finite differences', relnu < 1e-4, ...
     sprintf('analytic %.5f  fd %.5f', gg(d+2), gnu_fd));
 
@@ -185,11 +185,11 @@ for k = 1:dt
 end
 yt = chol(sv_matern(sqrt(rt), nu_true) + 1e-9*eye(nt), 'lower') * randn(nt,1);
 ft = sv_fit(yt, lt, 'm', 20, 'nu', 'estimate', 'nugget', 0, 'trend', 'zero', 'vcf', false);
+assert(abs(ft.nu - nu_true) < 0.45)
 report('estimated smoothness recovers the truth', abs(ft.nu - nu_true) < 0.45, ...
     sprintf('nu_hat %.3f (true %.1f), ranges %s', ft.nu, nu_true, mat2str(ft.parms(2:3),3)));
 
 fprintf('=== done ===\n\n');
-end
 
 % ------------------------------------------------------------------------
 function K = exact_cov(l1, l2, parms, ~)
@@ -222,3 +222,4 @@ catch
     randn('state', s); rand('state', s);   %#ok<RAND>
 end
 end
+
