@@ -1,11 +1,11 @@
-function fit = sv_fit(y, inputs, varargin)
+function fit = sv_fit(inputs, y, varargin)
 %SV_FIT  Scaled Vecchia estimation of an anisotropic Matern GP emulator.
 %
-%   FIT = SV_FIT(Y, INPUTS) fits a Gaussian-process emulator to the n model
+%   FIT = SV_FIT(INPUTS, Y) fits a Gaussian-process emulator to the n model
 %   runs Y observed at the n x d input matrix INPUTS, using the scaled Vecchia
 %   approximation of Katzfuss, Guinness & Lawrence (2020).
 %
-%   FIT = SV_FIT(Y, INPUTS, 'name', value, ...) accepts:
+%   FIT = SV_FIT(INPUTS, Y, 'name', value, ...) accepts:
 %
 %     'm'          conditioning-set size                      (default 30)
 %     'nu'         Matern smoothness.  A number fixes it; 0.5, 1.5, 2.5 and

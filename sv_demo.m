@@ -74,7 +74,7 @@ ytest = sv_borehole(inputs_test);
 fprintf('response range [%.1f, %.1f], sd %.2f\n\n', min(y), max(y), std(y));
 
 t0 = tic;
-fit = sv_fit(y, inputs, 'm', m, 'nu', 3.5, 'nugget', 0, 'scale', 'parms');
+fit = sv_fit(inputs, y, 'm', m, 'nu', 3.5, 'nugget', 0, 'scale', 'parms');
 tfit = toc(t0);
 
 t1 = tic;
@@ -106,7 +106,7 @@ fprintf('90%% simulation-interval coverage %.3f\n', mean(ytest >= lo & ytest <= 
 fprintf('\n--- Part 3: estimating the Matern smoothness ---\n');
 nsub = min(n, 800);
 t3 = tic;
-fitnu = sv_fit(y(1:nsub), inputs(1:nsub,:), 'm', m, 'nu', 'estimate', ...
+fitnu = sv_fit(inputs(1:nsub,:), y(1:nsub), 'm', m, 'nu', 'estimate', ...
     'nugget', 0, 'scale', 'parms', 'vcf', false);
 fprintf('n = %d: nu_hat = %.3f  (fixed-nu fit used %.1f), %.1f s\n', ...
     nsub, fitnu.nu, 3.5, toc(t3));

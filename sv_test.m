@@ -184,7 +184,7 @@ for k = 1:dt
     rt = rt + ((lt(:,k) - lt(:,k)')/pt(1+k)).^2;
 end
 yt = chol(sv_matern(sqrt(rt), nu_true) + 1e-9*eye(nt), 'lower') * randn(nt,1);
-ft = sv_fit(yt, lt, 'm', 20, 'nu', 'estimate', 'nugget', 0, 'trend', 'zero', 'vcf', false);
+ft = sv_fit(lt, yt, 'm', 20, 'nu', 'estimate', 'nugget', 0, 'trend', 'zero', 'vcf', false);
 assert(abs(ft.nu - nu_true) < 0.45)
 report('estimated smoothness recovers the truth', abs(ft.nu - nu_true) < 0.45, ...
     sprintf('nu_hat %.3f (true %.1f), ranges %s', ft.nu, nu_true, mat2str(ft.parms(2:3),3)));
