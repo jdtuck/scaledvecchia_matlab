@@ -1,4 +1,4 @@
-function fit = sv_fit(inputs, y, varargin)
+function obj = sv_fit(inputs, y, varargin)
 %SV_FIT  Scaled Vecchia estimation of an anisotropic Matern GP emulator.
 %
 %   FIT = SV_FIT(INPUTS, Y) fits a Gaussian-process emulator to the n model
@@ -235,6 +235,7 @@ if o.vcf
         fprintf('  variance correction factor: %.4f\n', fit.vcf);
     end
 end
+obj = sv_model(fit);
 end
 
 % =========================================================================
