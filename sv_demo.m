@@ -78,7 +78,7 @@ fit = sv_fit(inputs, y, 'm', m, 'nu', 3.5, 'nugget', 0, 'scale', 'parms');
 tfit = toc(t0);
 
 t1 = tic;
-p = sv_predict(fit, inputs_test, 'm', 100, 'joint', false, 'variance', true);
+p = sv_predict(fit.model, inputs_test, 'm', 100, 'joint', false, 'variance', true);
 tpred = toc(t1);
 
 err  = ytest - p.mean;
@@ -86,8 +86,8 @@ rmse = sqrt(mean(err.^2));
 score = mean(0.5*log(2*pi*p.var) + 0.5*err.^2 ./ p.var);
 cover = mean(abs(err) <= 1.96*sqrt(p.var));
 
-fprintf('estimated variance %.4g, nugget %.3g, vcf %.3f\n', fit.parms(1), fit.parms(end), fit.vcf);
-fprintf('estimated ranges   %s\n', mat2str(fit.parms(2:d+1), 3));
+fprintf('estimated variance %.4g, nugget %.3g, vcf %.3f\n', fit.model.parms(1), fit.model.parms(end), fit.model.vcf);
+fprintf('estimated ranges   %s\n', mat2str(fit.model.parms(2:d+1), 3));
 fprintf('(a small range means an influential input; the borehole response is\n');
 fprintf(' driven mainly by input 1, the borehole radius r_w)\n\n');
 fprintf('fit %.1f s, prediction at %d points %.2f s\n', tfit, ntest, tpred);
@@ -95,7 +95,7 @@ fprintf('RMSE %.4f (%.2e of the response sd), mean log score %.3f, 95%% coverage
     rmse, rmse/std(ytest), score, cover);
 
 t2 = tic;
-ps = sv_predict(fit, inputs_test, 'm', 100, 'joint', true, 'nsims', 100);
+ps = sv_predict(fit.model, inputs_test, 'm', 100, 'joint', true, 'nsims', 100);
 fprintf('100 joint conditional simulations in %.2f s; ', toc(t2));
 lo = quantile_(ps.samples, 0.05); hi = quantile_(ps.samples, 0.95);
 fprintf('90%% simulation-interval coverage %.3f\n', mean(ytest >= lo & ytest <= hi));
@@ -109,8 +109,8 @@ t3 = tic;
 fitnu = sv_fit(inputs(1:nsub,:), y(1:nsub), 'm', m, 'nu', 'estimate', ...
     'nugget', 0, 'scale', 'parms', 'vcf', false);
 fprintf('n = %d: nu_hat = %.3f  (fixed-nu fit used %.1f), %.1f s\n', ...
-    nsub, fitnu.nu, 3.5, toc(t3));
-pn = sv_predict(fitnu, inputs_test, 'm', 100, 'joint', false, 'variance', true);
+    nsub, fitnu.model.nu, 3.5, toc(t3));
+pn = sv_predict(fitnu.model, inputs_test, 'm', 100, 'joint', false, 'variance', true);
 fprintf('RMSE with estimated smoothness %.4f\n', sqrt(mean((ytest - pn.mean).^2)));
 results.fit_nu = fitnu;
 
