@@ -14,6 +14,10 @@ y      = sv_borehole(inputs);
 fit  = sv_fit(y, inputs);                       % estimate
 pred = sv_predict(fit, rand(500,8), 'joint', false, 'variance', true);
 
+% repeated prediction at the same inputs (MCMC): prepare once, draw in the loop
+prep = sv_prepare(fit, rand(500,8), 'm', 100, 'joint', false);
+s    = sv_draw(prep, 'nsims', 1, 'variance', true);
+
 sv_test    % run the correctness checks
 sv_demo    % likelihood-accuracy comparison + borehole emulation
 ```
@@ -55,7 +59,12 @@ matching GpGp's `matern_scaledim` ordering.
 | file | role |
 |---|---|
 | `sv_fit.m` | main entry point: interleaved scaling and Fisher scoring |
-| `sv_predict.m` | joint prediction and conditional simulation, or pointwise prediction with variances |
+| `sv_predict.m` | one-shot prediction; a thin wrapper over prepare + draw |
+| `sv_prepare.m`, `sv_draw.m` | split prediction: cache the plan once, draw from it cheaply in a loop |
+| `sv_cache.m`, `sv_knn.m` | fit-time observed-side cache (scaled design, residuals, k-d tree) and its neighbour query |
+| `sv_diag_idx.m` | linear indices for block diagonals, avoiding per-column indexed assignment |
+| `sv_sqdist.m`, `sv_chunk.m`, `sv_page_threshold.m` | performance primitives: Gram distances, cache-sized chunking, LAPACK dispatch |
+| `sv_vecchia_columns.m` | columns of the sparse Vecchia factor, shared by predict and prepare |
 | `sv_loglik.m` | Vecchia loglikelihood, gradient, expected Fisher information, profiled GLS mean |
 | `sv_fisher.m` | Fisher-scoring loop with ridge and backtracking line search |
 | `sv_maxmin_order.m`, `sv_nn.m` | maximin ordering and ordered nearest-neighbour conditioning sets |
@@ -93,6 +102,113 @@ target application is a deterministic computer model. For noisy data pass
 | `joint` | `true` | joint Vecchia over observed + prediction points; needed for simulation |
 | `nsims` | 0 | number of joint conditional simulations |
 | `variance` | `false` | return pointwise variances (use with `joint=false` for exact ones) |
+
+## Repeated prediction (MCMC)
+
+`sv_predict` recomputes everything on every call: the neighbour search, the
+covariance blocks, the Cholesky factorizations and the Vecchia weights. None of
+those depend on the response values or on the random draws — only on
+`fit.parms` and the prediction inputs. In a loop that is pure waste.
+
+Split the work instead:
+
+```matlab
+prep = sv_prepare(fit, x_new, 'm', 100, 'joint', false);
+for it = 1:niter
+    s = sv_draw(prep, 'nsims', 1, 'variance', true);
+end
+```
+
+or through the model object:
+
+```matlab
+obj = obj.prepare(x_new);
+for it = 1:niter
+    s = obj.draw('nsims', 1);
+end
+```
+
+Measured at `n = 4000`, `n_pred = 200`, `m = 100`:
+
+| | per call |
+|---|---|
+| `sv_predict` | 239 ms |
+| `sv_prepare` (once) | 234 ms |
+| `sv_draw` (pointwise) | **0.17 ms** |
+| `sv_draw` (joint) | **0.15 ms** |
+
+Roughly 1400x per iteration, with results bit-identical to `sv_predict`.
+
+If the *response* changes each iteration but the inputs and covariance
+parameters do not — sampling a trend, or conditioning on updated data — pass
+the new vector to `sv_draw`:
+
+```matlab
+s = sv_draw(prep, 'y', y_new, 'nsims', 1);     % 0.37 ms
+```
+
+The cached weights are reused and only the mean is recomputed, `O(n_pred * m)`.
+A plan is valid while `fit.parms` and `x_new` are unchanged; if the covariance
+parameters move, build a new one.
+
+**Two regimes, two kernels.** Fitting uses small conditioning sets (`m` around
+30) and prediction large ones (`m` around 100), and the fastest code differs
+between them. Batched routines that vectorize across blocks and loop over the
+`p` columns win while the working set fits in cache; above `p` about 45 they
+become memory-bound and a per-page call into LAPACK's blocked factorization is
+3-4x faster. `sv_bchol`, `sv_bfsolve` and `sv_blastrow` dispatch on that
+threshold, isolated in `sv_page_threshold`.
+
+Squared distances use the Gram identity `|x-y|^2 = |x|^2 + |y|^2 - 2x'y` rather
+than `d` broadcast subtractions. The naive form writes and re-reads `d` full
+`nb x p x p` temporaries — hundreds of MB of traffic per chunk at prediction
+block sizes — while the Gram form hands the same arithmetic to BLAS with
+`O(nb*p*d)` input traffic. That is 4-7x at `m = 100`, and never slower.
+`sv_chunk` caps the working set rather than maximizing it, for the same reason.
+
+### Calibration: new inputs every iteration
+
+Bayesian calibration proposes a new theta each iteration and predicts at a new
+input, so a prepared plan cannot be reused. What *can* be reused is the
+observed side of the problem, and `sv_fit` now caches it on the fitted model:
+the scaled design, its squared norms, the residuals `y - X*beta`, and a
+`KDTreeSearcher` over the scaled design when Statistics Toolbox is available.
+This mirrors the `_pred_tree_cache` / `_resid_cache` design in the Python
+`predict_speedup` branch.
+
+```matlab
+fit = sv_cache(fit);      % sv_fit does this for you
+for it = 1:niter
+    theta = propose();
+    p = sv_predict(fit, [x_obs, theta], 'm', 100, 'joint', false, 'variance', true);
+end
+```
+
+Rebuilding that per call meant re-scaling all `n` training rows and re-forming
+the residuals for a prediction that might involve a single point. Measured at
+`n = 4000`, `m = 100`, in Octave without a k-d tree:
+
+| `n_pred` | before | after |
+|---|---|---|
+| 1 | 5.56 ms | **1.66 ms** |
+| 5 | 10.95 ms | 7.61 ms |
+| 50 | 67.0 ms | 57.1 ms |
+
+The single-point case gains most, which is the calibration case. Under MATLAB
+the gap is wider: the neighbour search drops to a k-d tree query, and it is
+0.53 ms of the remaining 1.66 ms here.
+
+If you change `fit.parms`, `fit.y` or `fit.beta` by hand, call `sv_cache(fit)`
+again — prediction trusts the cache.
+
+### Noise-free prediction
+
+`'noise_free'` (default `true`) drops the nugget from the target's own
+variance, so prediction is of the latent process rather than of a fresh noisy
+observation, matching the Python branch. With the default nugget of 0 it makes
+no difference; with an estimated nugget the variance differs by exactly
+`sigma^2 * tau^2`. Pass `'noise_free', false` for the predictive variance of a
+new observation.
 
 ## Implementation notes
 
