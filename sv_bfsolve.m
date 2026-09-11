@@ -8,6 +8,14 @@ function X = sv_bfsolve(L, B)
 q = size(B, 3);
 X = zeros(nb, p, q);
 
+if p >= sv_page_threshold()
+    for i = 1:nb
+        Li = reshape(L(i,:,:), [p p]);
+        X(i,:,:) = reshape(Li \ reshape(B(i,:,:), [p q]), [1 p q]);
+    end
+    return
+end
+
 for i = 1:p
     b = B(:,i,:);                                   % nb x 1 x q
     if i > 1

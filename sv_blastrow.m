@@ -14,6 +14,16 @@ function s = sv_blastrow(L)
 
 [nb, p, ~] = size(L);
 s = zeros(nb, p);
+
+if p >= sv_page_threshold()
+    e = zeros(p, 1); e(p) = 1;
+    for i = 1:nb
+        Li = reshape(L(i,:,:), [p p]);
+        s(i,:) = (Li' \ e)';
+    end
+    return
+end
+
 s(:,p) = 1 ./ L(:,p,p);
 for i = p-1:-1:1
     acc = sum(reshape(L(:,i+1:p,i), [nb p-i]) .* s(:,i+1:p), 2);
