@@ -76,10 +76,11 @@ classdef sv_model
             end
             idxSamples = options.idxSamples;
             if isnan(idxSamples) 
-                idxSamples = 1:obj.model.nSamples;
+                idxSamples = 1:obj.nSamples;
                 nsims = obj.nSamples;
             else
                 nsims = length(idxSamples);
+                idxSamples = 1:nsims;
             end
 
             % reuse the cached plan when it matches this request
