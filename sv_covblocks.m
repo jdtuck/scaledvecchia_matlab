@@ -25,6 +25,12 @@ function [C, aux] = sv_covblocks(coords, parms, jitter, want_g, want_dnu)
 %   through Bessel functions, which dominates the cost.  In that case only the
 %   strict upper triangle of each block is evaluated and mirrored, halving the
 %   number of Bessel calls.
+%
+%   The scaled squared distances come from SV_SQDIST, which uses the Gram
+%   identity rather than d broadcast subtractions.  That matters: the naive
+%   form writes and re-reads d full nb x p x p temporaries, so it is limited by
+%   memory bandwidth, while the Gram form pushes the same arithmetic through
+%   BLAS with O(nb*p*d) input traffic.
 
 if nargin < 4, want_g   = true;  end
 if nargin < 5, want_dnu = false; end
@@ -35,13 +41,8 @@ ranges = parms(2:d+1);
 nu     = parms(d+2);
 nug    = parms(d+3);
 
-D2 = zeros(nb, p, p);
-for k = 1:d
-    xk = coords(:,:,k) / ranges(k);
-    dk = reshape(xk, [nb p 1]) - reshape(xk, [nb 1 p]);
-    D2 = D2 + dk.^2;
-end
-r = sqrt(D2);
+D2 = sv_sqdist(coords, ranges);
+r  = sqrt(D2);
 
 fast = any(nu == [0.5 1.5 2.5 3.5]);
 if fast
@@ -56,9 +57,8 @@ else
 end
 
 C = sig2 * f;
-for i = 1:p
-    C(:,i,i) = C(:,i,i) + sig2 * (nug + jitter);
-end
+dg = sv_diag_idx(nb, p);
+C(dg) = C(dg) + sig2 * (nug + jitter);
 
 aux.f = f;
 if want_g

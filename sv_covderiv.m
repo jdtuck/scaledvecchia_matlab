@@ -14,9 +14,8 @@ nug    = parms(d+3);
 
 if j == 1                                   % d/d sigma^2
     dC = aux.f;
-    for i = 1:p
-        dC(:,i,i) = dC(:,i,i) + (nug + jitter);
-    end
+    dg = sv_diag_idx(nb, p);
+    dC(dg) = dC(dg) + (nug + jitter);
 elseif j <= d+1                             % d/d lambda_k
     k  = j - 1;
     xk = coords(:,:,k);
@@ -30,9 +29,7 @@ elseif j == d+2                             % d/d nu
     dC = sig2 * aux.dfdnu;
 elseif j == d+3                             % d/d tau^2
     dC = zeros(nb, p, p);
-    for i = 1:p
-        dC(:,i,i) = sig2;
-    end
+    dC(sv_diag_idx(nb, p)) = sig2;
 else
     error('sv_covderiv:index', 'parameter index out of range');
 end
