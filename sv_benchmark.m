@@ -15,7 +15,9 @@ function results = sv_benchmark(varargin)
 %     'niter'     draws used to time the MCMC inner loop      (default 200)
 %     'sweeps'    which sweeps to run, any of 'n','d','m','mcmc'
 %                                                   (default all four)
-%     'reps'      repetitions of each timing, minimum taken   (default 1)
+%     'reps'      repetitions of each timing, minimum taken   (default 3)
+%     'warmup'    run an untimed fit and predict first         (default true)
+%     'min_time'  repeat short timings until they exceed this  (default 0.05 s)
 %     'verbose'   print as it goes                            (default true)
 %
 %   Each sweep reports wall time and, next to it, the empirical exponent from a
@@ -46,17 +48,28 @@ o = sv_options(struct( ...
     'ns', [500 1000 2000 4000], 'ds', [2 4 8 16], 'ms', [10 20 40 80], ...
     'n_fixed', 2000, 'd_fixed', 8, 'm_fixed', 30, ...
     'n_pred', 500, 'm_pred', 100, 'niter', 200, ...
-    'sweeps', {{'n','d','m','mcmc'}}, 'reps', 1, 'verbose', true, ...
-    'seed', 1), varargin);
+    'sweeps', {{'n','d','m','mcmc'}}, 'reps', 3, 'verbose', true, ...
+    'warmup', true, 'min_time', 0.05, 'seed', 1), varargin);
 
 if ischar(o.sweeps), o.sweeps = {o.sweeps}; end
 
 results = struct();
 results.info = env_info();
 
+sweep_warn(o);
+
 if o.verbose
     fprintf('\n=== scaled Vecchia scaling benchmark ===\n');
     fprintf('%s\n', results.info.line);
+end
+
+% MATLAB compiles each function on first execution.  Without a warm-up that
+% cost lands entirely on the first row of the first sweep, which made fitting
+% look sublinear in n and prediction look like it got *faster* with more
+% training data.  Both are impossible; both were this.
+if o.warmup
+    if o.verbose, fprintf('warming up...\n'); end
+    warm_up();
 end
 
 if any(strcmp(o.sweeps, 'n'))
@@ -85,25 +98,30 @@ function r = sweep_n(o)
 if o.verbose
     fprintf('\n-- scaling in n (d = %d, m = %d, n_pred = %d, m_pred = %d)\n', ...
         o.d_fixed, o.m_fixed, o.n_pred, o.m_pred);
-    header({'n', 'fit (s)', 'predict (s)', 'fit/n (ms)'});
+    header({'n', 'fit (s)', 'grad eval (ms)', 'predict (ms)'});
 end
 k = numel(o.ns);
-r = struct('n', o.ns, 'fit', zeros(1,k), 'predict', zeros(1,k));
+r = struct('n', o.ns, 'fit', zeros(1,k), 'kernel', zeros(1,k), 'predict', zeros(1,k));
 for i = 1:k
     [X, y] = make_data(o.ns(i), o.d_fixed, o.seed);
     Xt = rand(o.n_pred, o.d_fixed);
     [r.fit(i), fit] = time_fit(X, y, o.m_fixed, o.reps);
-    r.predict(i) = time_pred(fit, Xt, o.m_pred, o.reps);
+    r.kernel(i)  = time_kernel(X, y, o.m_fixed, o.reps, o.min_time);
+    r.predict(i) = time_pred(fit, Xt, o.m_pred, o.reps, o.min_time);
     if o.verbose
-        row({o.ns(i), r.fit(i), r.predict(i), 1000*r.fit(i)/o.ns(i)});
+        row({o.ns(i), r.fit(i), 1000*r.kernel(i), 1000*r.predict(i)});
     end
 end
 r.fit_exponent     = loglog_slope(o.ns, r.fit);
+r.kernel_exponent  = loglog_slope(o.ns, r.kernel);
 r.predict_exponent = loglog_slope(o.ns, r.predict);
 if o.verbose
-    fprintf('   empirical exponent: fit n^%.2f, predict n^%.2f\n', ...
-        r.fit_exponent, r.predict_exponent);
-    fprintf('   (fit mixes O(n) likelihood work with O(n^2) ordering/neighbours)\n');
+    fprintf('   exponents: grad eval n^%.2f | predict n^%.2f | whole fit n^%.2f\n', ...
+        r.kernel_exponent, r.predict_exponent, r.fit_exponent);
+    fprintf('   (grad eval is the clean one: linear in n plus O(n^2) ordering\n');
+    fprintf('    and neighbour work.  predict should be flat -- it depends on\n');
+    fprintf('    n_pred and m_pred, not on how much training data there is.\n');
+    fprintf('    The whole-fit column also carries the optimizer iteration count.)\n');
 end
 end
 
@@ -111,23 +129,27 @@ end
 function r = sweep_d(o)
 if o.verbose
     fprintf('\n-- scaling in d (n = %d, m = %d)\n', o.n_fixed, o.m_fixed);
-    header({'d', 'fit (s)', 'predict (s)', 'n active parms'});
+    header({'d', 'fit (s)', 'grad eval (ms)', 'predict (ms)'});
 end
 k = numel(o.ds);
-r = struct('d', o.ds, 'fit', zeros(1,k), 'predict', zeros(1,k));
+r = struct('d', o.ds, 'fit', zeros(1,k), 'kernel', zeros(1,k), 'predict', zeros(1,k));
 for i = 1:k
     [X, y] = make_data(o.n_fixed, o.ds(i), o.seed);
     Xt = rand(o.n_pred, o.ds(i));
     [r.fit(i), fit] = time_fit(X, y, o.m_fixed, o.reps);
-    r.predict(i) = time_pred(fit, Xt, o.m_pred, o.reps);
+    r.kernel(i)  = time_kernel(X, y, o.m_fixed, o.reps, o.min_time);
+    r.predict(i) = time_pred(fit, Xt, o.m_pred, o.reps, o.min_time);
     if o.verbose
-        row({o.ds(i), r.fit(i), r.predict(i), o.ds(i)+1}, '%18d');
+        row({o.ds(i), r.fit(i), 1000*r.kernel(i), 1000*r.predict(i)});
     end
 end
-r.fit_exponent = loglog_slope(o.ds, r.fit);
+r.fit_exponent    = loglog_slope(o.ds, r.fit);
+r.kernel_exponent = loglog_slope(o.ds, r.kernel);
 if o.verbose
-    fprintf('   empirical exponent: fit d^%.2f\n', r.fit_exponent);
-    fprintf('   (one extra range parameter per input, each adding a gradient term)\n');
+    fprintf('   exponents: grad eval d^%.2f | whole fit d^%.2f\n', ...
+        r.kernel_exponent, r.fit_exponent);
+    fprintf('   (d+1 active parameters, so the gradient term is linear in d;\n');
+    fprintf('    distances are linear in d too, but that part is now one BLAS call)\n');
 end
 end
 
@@ -135,25 +157,30 @@ end
 function r = sweep_m(o)
 if o.verbose
     fprintf('\n-- scaling in m (n = %d, d = %d)\n', o.n_fixed, o.d_fixed);
-    header({'m', 'fit (s)', 'predict (s)', 'fit/m^3 (us)'});
+    header({'m', 'fit (s)', 'grad eval (ms)', 'predict (ms)'});
 end
 k = numel(o.ms);
-r = struct('m', o.ms, 'fit', zeros(1,k), 'predict', zeros(1,k));
+r = struct('m', o.ms, 'fit', zeros(1,k), 'kernel', zeros(1,k), 'predict', zeros(1,k));
 [X, y] = make_data(o.n_fixed, o.d_fixed, o.seed);
 Xt = rand(o.n_pred, o.d_fixed);
 for i = 1:k
     [r.fit(i), fit] = time_fit(X, y, o.ms(i), o.reps);
-    r.predict(i) = time_pred(fit, Xt, o.ms(i), o.reps);
+    r.kernel(i)  = time_kernel(X, y, o.ms(i), o.reps, o.min_time);
+    r.predict(i) = time_pred(fit, Xt, o.ms(i), o.reps, o.min_time);
     if o.verbose
-        row({o.ms(i), r.fit(i), r.predict(i), 1e6*r.fit(i)/o.ms(i)^3});
+        row({o.ms(i), r.fit(i), 1000*r.kernel(i), 1000*r.predict(i)});
     end
 end
 r.fit_exponent     = loglog_slope(o.ms, r.fit);
+r.kernel_exponent  = loglog_slope(o.ms, r.kernel);
 r.predict_exponent = loglog_slope(o.ms, r.predict);
 if o.verbose
-    fprintf('   empirical exponent: fit m^%.2f, predict m^%.2f\n', ...
-        r.fit_exponent, r.predict_exponent);
-    fprintf('   (each block is (m+1)x(m+1); factorization is cubic, setup quadratic)\n');
+    fprintf('   exponents: grad eval m^%.2f | predict m^%.2f | whole fit m^%.2f\n', ...
+        r.kernel_exponent, r.predict_exponent, r.fit_exponent);
+    fprintf('   (blocks are (m+1)x(m+1): factorization cubic, covariance setup\n');
+    fprintf('    quadratic, so expect the kernel between 2 and 3 and drifting up.\n');
+    fprintf('    The whole-fit column also carries the optimizer iteration count,\n');
+    fprintf('    which moves with m for reasons unrelated to per-evaluation cost.)\n');
 end
 end
 
@@ -207,6 +234,67 @@ end
 end
 
 % =========================================================================
+function sweep_warn(o)
+if ~o.verbose, return; end
+short = {};
+if any(strcmp(o.sweeps,'n')) && numel(o.ns) < 4, short{end+1} = 'ns'; end
+if any(strcmp(o.sweeps,'d')) && numel(o.ds) < 4, short{end+1} = 'ds'; end
+if any(strcmp(o.sweeps,'m')) && numel(o.ms) < 4, short{end+1} = 'ms'; end
+if ~isempty(short)
+    fprintf(['NOTE: %s has fewer than 4 points, so the fitted exponents are\n' ...
+             '      indicative only.  Fixed per-call overhead also flattens the\n' ...
+             '      slope at small sizes; sweep at least a decade for a number\n' ...
+             '      worth quoting.\n'], strjoin(short, ', '));
+end
+end
+
+function warm_up()
+% Touch every code path the sweeps will time, at negligible size.
+Xw = rand(80, 3); yw = sin(3*Xw(:,1));
+fw = sv_fit(Xw, yw, 'm', 8, 'nu', 3.5, 'nugget', 0, 'vcf', false);
+if isobject(fw) || (isstruct(fw) && isfield(fw, 'model')), fw = fw.model; end
+sv_predict(fw, rand(20,3), 'm', 10, 'joint', false, 'variance', true);
+pw = sv_prepare(fw, rand(20,3), 'm', 10, 'joint', false);
+sv_draw(pw, 'nsims', 1, 'variance', true);
+sv_predict(fw, rand(20,3), 'm', 10, 'joint', true, 'nsims', 2);
+end
+
+function t = time_kernel(X, y, m, reps, min_time)
+% One loglikelihood-with-gradient evaluation at fixed parameters.
+%
+% This is the quantity with a clean exponent.  Time-to-convergence also
+% depends on how many Fisher-scoring steps the optimizer happens to take,
+% which varies with n, d and m for reasons that have nothing to do with the
+% cost of a single evaluation, so the two must be reported separately.
+[n, d] = size(X);
+parms  = [var(y), 0.3*ones(1,d), 3.5, 0];
+active = true(1, d+3); active(d+2) = false; active(d+3) = false;
+sc  = 1 ./ parms(2:d+1);
+ord = sv_maxmin_order(X .* sc);
+NN  = sv_nn(X(ord,:) .* sc, min(m, n-1));
+yo  = y(ord); Lo = X(ord,:); Xo = ones(n,1);
+t = repeat_timed(@() sv_loglik(parms, yo, Xo, Lo, NN, active, 1e-12, true), ...
+                 reps, min_time);
+end
+
+function t = repeat_timed(f, reps, min_time)
+% Minimum over reps, each rep looped until it clears min_time so that short
+% measurements are not dominated by timer resolution.
+best = Inf;
+for r = 1:reps
+    k = 1;
+    while true
+        tt = tic;
+        for i = 1:k, f(); end
+        el = toc(tt);
+        if el >= min_time || k >= 1e6, break; end
+        k = max(2*k, ceil(k * min_time / max(el, 1e-6)));
+    end
+    best = min(best, el/k);
+end
+t = best;
+end
+
 function [X, y] = make_data(n, d, seed)
 set_seed(seed);
 X = rand(n, d);
@@ -232,18 +320,18 @@ end
 t = best;
 end
 
-function t = time_pred(fit, Xt, m, reps)
-best = Inf;
-for r = 1:reps
-    tt = tic;
-    p = sv_predict(fit, Xt, 'm', m, 'joint', false, 'variance', true); %#ok<NASGU>
-    best = min(best, toc(tt));
-end
-t = best;
+function t = time_pred(fit, Xt, m, reps, min_time)
+t = repeat_timed(@() sv_predict(fit, Xt, 'm', m, 'joint', false, ...
+    'variance', true), reps, min_time);
 end
 
 function b = loglog_slope(x, t)
-% least-squares slope of log(time) on log(x): the empirical exponent
+% Least-squares slope of log(time) on log(x): the empirical exponent.
+%
+% Needs several points spanning a wide range to mean anything.  With a short
+% sweep, or one that starts small, fixed per-call overhead flattens the slope
+% and the exponent reads low; SWEEP_WARN says so rather than letting the
+% number be quoted on its own.
 good = t > 0 & isfinite(t);
 if sum(good) < 2, b = NaN; return; end
 lx = log(x(good)); lt = log(t(good));
@@ -255,9 +343,8 @@ fprintf('  %-10s %12s %14s %18s\n', c{1}, c{2}, c{3}, c{4});
 fprintf('  %s\n', repmat('-', 1, 58));
 end
 
-function row(c, last_fmt)
-if nargin < 2, last_fmt = '%18.3f'; end
-fprintf(['  %-10d %12.2f %14.2f ' last_fmt '\n'], c{1}, c{2}, c{3}, c{4});
+function row(c)
+fprintf('  %-10d %12.2f %14.3f %18.3f\n', c{1}, c{2}, c{3}, c{4});
 end
 
 function set_seed(s)
