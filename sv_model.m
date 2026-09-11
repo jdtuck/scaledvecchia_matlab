@@ -17,12 +17,18 @@ classdef sv_model
     properties
         model
         samples
+        nSamples
         prep        % cached prediction plan from sv_prepare, or empty
     end
 
     methods
-        function obj = sv_model(model)
+        function obj = sv_model(model, nSamples)
+            arguments
+                model
+                nSamples = 1000
+            end
             obj.model = model;
+            obj.nSamples = nSamples;
         end
 
         function obj = prepare(obj, x_new, options)
@@ -65,13 +71,15 @@ classdef sv_model
                 x_new
                 options.idxSamples = nan;
                 options.m = 100
-                options.nsims = 200;
                 options.joint = false
                 options.variance = true
             end
             idxSamples = options.idxSamples;
             if isnan(idxSamples) 
-                idxSamples = 1:options.nsims;
+                idxSamples = 1:obj.model.nSamples;
+                nsims = obj.nSamples;
+            else
+                nsims = length(idxSamples);
             end
 
             % reuse the cached plan when it matches this request
@@ -84,7 +92,7 @@ classdef sv_model
                 p = sv_draw(obj.prep, 'nsims', options.nsims, ...
                     'variance', options.variance);
             else
-                p = sv_predict(obj.model, x_new, 'm', options.m, 'nsims', options.nsims, 'joint', options.joint, 'variance', options.variance);
+                p = sv_predict(obj.model, x_new, 'm', options.m, 'nsims', nsims, 'joint', options.joint, 'variance', options.variance);
             end
             pred = p.samples(:,idxSamples)';
         end
