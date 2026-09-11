@@ -202,6 +202,32 @@ assert(abs(ft.model.nu - nu_true) < 0.45)
 report('estimated smoothness recovers the truth', abs(ft.model.nu - nu_true) < 0.45, ...
     sprintf('nu_hat %.3f (true %.1f), ranges %s', ft.model.nu, nu_true, mat2str(ft.model.parms(2:3),3)));
 
+
+% ---- 9. the two neighbour-search paths agree ----------------------------
+%      sv_nn takes a k-d tree route when Statistics Toolbox is present and a
+%      blocked brute-force route otherwise.  Only one runs on a given machine,
+%      so compare against an independent O(n^2) reference here.
+rand('state', 21);
+agree = true;
+for cfg = {{400,3,15},{900,6,30},{300,2,1}}
+    nn_n = cfg{1}{1}; nn_d = cfg{1}{2}; nn_m = cfg{1}{3};
+    L2 = rand(nn_n, nn_d);
+    A = sv_nn(L2, nn_m);
+    for i = 2:nn_n
+        D = sum((L2(1:i-1,:) - L2(i,:)).^2, 2);
+        kk = min(nn_m, i-1);
+        [~, srt] = sort(D);
+        want = sort(srt(1:kk))';
+        got  = sort(A(i, 2:end));
+        got  = got(got > 0);          % column 1 is the row index itself
+        if numel(got) ~= kk || any(got ~= want)
+            agree = false; break
+        end
+    end
+end
+report('sv_nn matches a brute-force reference', agree, ...
+    'exact conditioning sets on 3 configurations');
+
 fprintf('=== done ===\n\n');
 
 % ------------------------------------------------------------------------

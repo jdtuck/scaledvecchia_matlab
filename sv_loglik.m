@@ -92,13 +92,13 @@ for p = psizes
 
         if need_grad
             s = sv_blastrow(L);                       % nb x p
-            Z = zeros(nb, p, nact);
+            % All parameter derivatives, already contracted against s.  The
+            % derivative matrices themselves are never formed: see
+            % SV_DCONTRACT for why that is the dominant cost otherwise.
+            Tc = sv_dcontract(coords, aux, s, parms, aidx, jitter);
+            Z  = sv_bfsolve(L, Tc);
             for jj = 1:nact
-                j  = aidx(jj);
-                dS = sv_covderiv(coords, aux, j, parms, jitter) * parms(j);
-                t  = reshape(sum(dS .* reshape(s, [nb 1 p]), 3), [nb p]);
-                z  = reshape(sv_bfsolve(L, reshape(t, [nb p 1])), [nb p]);
-                Z(:,:,jj) = z;
+                z = reshape(Z(:,:,jj), [nb p]);
                 P(R,jj) = z(:,p);
                 G(R,jj) = sum(z .* U(:,:,1), 2);
                 for c = 1:q
