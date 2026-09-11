@@ -235,6 +235,7 @@ if o.vcf
         fprintf('  variance correction factor: %.4f\n', fit.vcf);
     end
 end
+fit = sv_cache(fit);     % observed-side quantities every prediction reuses
 obj = sv_model(fit);
 end
 
