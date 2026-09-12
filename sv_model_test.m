@@ -40,7 +40,12 @@ mreport('a block of indices matches them one at a time', ...
     isequal(size(sblk), [2 np]) && max(max(abs(sblk - [s1; s3]))) < 1e-12, ...
     'rows follow idxSamples order');
 
-p = sv_predict(obj.model, xq, 'm', 100, 'joint', false, 'variance', true);
+% noise_free has to be passed explicitly on both sides: the class defaults
+% it to false and sv_predict to true.  The fixture has no nugget, so the
+% numbers coincide either way -- which is exactly why leaving it implicit
+% would make this check vacuous the day the fixture gains one.
+p = sv_predict(obj.model, xq, 'm', 100, 'joint', false, 'variance', true, ...
+    'noise_free', false);
 mreport('mean agrees with sv_predict', max(abs(mu1 - p.mean)) < 1e-12, ...
     sprintf('max diff %.3e', max(abs(mu1 - p.mean))));
 mreport('variance agrees with sv_predict', max(abs(v1 - p.var)) < 1e-12, ...
@@ -57,7 +62,10 @@ mreport('crn=false draws fresh randomness', ~isequal(a1, a2), ...
     'opt-out still available');
 
 % ---- path 1: prepare once, draw in a loop -------------------------------
-obj2 = obj.prepare(xq);
+% prepare still defaults noise_free true while predict defaults it false, so
+% a plan built by a bare prepare(xq) never matches what predict asks for and
+% the cache-hit check below would pass only because both sides rebuilt.
+obj2 = obj.prepare(xq, 'noise_free', false);
 sd1 = obj2.draw('idxSamples', 7);
 mreport('prepare/draw equals predict for the same index', ...
     max(abs(sd1 - s1)) < 1e-12, 'the two paths agree');
