@@ -48,10 +48,18 @@ classdef sv_model
     %   pointwise variance, and of NOISE_FREE being ignored -- the joint
     %   factor always carries the nugget).
     %
+    %   RESIDSD reports the simulator's own noise SD on the response scale,
+    %   sqrt(variance * nugget), for a likelihood that needs it separately
+    %   from the emulator uncertainty.
+    %
     %   Outputs: [SAMPLES, MEAN, VAR].  SAMPLES is nsims-by-n_pred, one row
     %   per surrogate realization; MEAN and VAR are n_pred-by-1.
     %
     %   See also SV_FIT, SV_PREPARE, SV_DRAW, SV_PREDICT.
+
+    properties (Dependent)
+        residSD              % noise SD on the response scale
+    end
 
     properties
         model                % the fitted struct from sv_fit
@@ -63,6 +71,29 @@ classdef sv_model
     end
 
     methods
+        function s = get.residSD(obj)
+            % RESIDSD  Noise standard deviation, on the scale of the response.
+            %
+            %   The nugget is relative -- sv_covblocks puts variance*nugget on
+            %   the diagonal -- so the noise variance is parms(1)*parms(end)
+            %   and this is its square root.  Use it where a calibration
+            %   likelihood needs the simulator's own noise SD.
+            %
+            %   This is residSD in the Python mvBayes wrapper without that
+            %   code's _ysd factor: sv_fit only ever centres the response (the
+            %   'pre' trend, carried in fit.beta) and never scales it, so the
+            %   fit is already on the response scale.
+            %
+            %   Zero under the default 'nugget', 0, which is what a
+            %   deterministic simulator wants.  Fit with 'nugget', 'estimate'
+            %   or a fixed positive value to get a nonzero one.
+            if isempty(obj.model) || ~isfield(obj.model, 'parms')
+                error('sv_model:residSD', 'the model carries no parms.');
+            end
+            pp = obj.model.parms;
+            s = sqrt(pp(1) * pp(end));
+        end
+
         function obj = sv_model(model, nSamples, options)
             arguments
                 model
