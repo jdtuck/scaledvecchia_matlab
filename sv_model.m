@@ -113,7 +113,7 @@ classdef sv_model
             [pred, mu, v] = obj.sample_from(obj.prep, idx, crn, options);
         end
 
-        function [pred, mu, v] = predict(obj, x_new, options)
+        function pred = predict(obj, x_new, options)
             % PREDICT  Draws at arbitrary inputs, building the plan as needed.
             arguments
                 obj
@@ -123,10 +123,10 @@ classdef sv_model
                 options.m = 100
                 options.joint = false
                 options.variance = true
-                options.noise_free = true
+                options.noise_free = false
                 options.scale = []
                 options.X_pred = []
-                options.crn = []
+                options.crn = true
                 options.y = []
                 options.beta = []
             end
