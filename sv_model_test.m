@@ -103,13 +103,30 @@ sst = obj3.predict(xq, 'idxSamples', 7);
 mreport('a cached plan is dropped when parms move', ~isequal(sst, s1), ...
     'prep.parms is compared against model.parms');
 
-fm = obj.model;
-fm.parms(2) = fm.parms(2) * 1.5;             % cache now stamped for old parms
-pa = sv_predict(fm, xq, 'm', 100, 'joint', false, 'variance', true);
-pb = sv_predict(sv_cache(fm), xq, 'm', 100, 'joint', false, 'variance', true);
+% Both directions, so the stamp check is shown to have teeth: a cache that
+% warps one input 50x picks different neighbours at m = 5, so it changes the
+% answer.  Stamped current it is trusted and the answer is wrong; stamped
+% stale it is rebuilt and the answer is right.
+fs = obj.model;
+warp = fs.cache;
+warp.scales(1) = warp.scales(1) * 50;
+warp.ref = fs.inputs .* warp.scales;
+warp.refsq = sum(warp.ref.^2, 2)';
+warp.searcher = [];                          % force the path that reads .ref
+fs.cache = warp;
+ptrust = sv_predict(fs, xq, 'm', 5, 'joint', false, 'variance', true);
+fs.cache.parms = fs.parms * 0.5;             % same cache, now stamped stale
+prebuilt = sv_predict(fs, xq, 'm', 5, 'joint', false, 'variance', true);
+pclean = sv_predict(sv_cache(obj.model), xq, 'm', 5, 'joint', false, ...
+    'variance', true);
 mreport('a stale observed-side cache is rebuilt', ...
-    max(abs(pa.mean - pb.mean)) < 1e-12 && max(abs(pa.var - pb.var)) < 1e-12, ...
-    sprintf('max mean diff %.3e', max(abs(pa.mean - pb.mean))));
+    max(abs(prebuilt.mean - pclean.mean)) < 1e-12, ...
+    sprintf('max diff from a clean cache %.3e', ...
+    max(abs(prebuilt.mean - pclean.mean))));
+mreport('a current stamp is trusted, so the check can bite', ...
+    max(abs(ptrust.mean - pclean.mean)) > 1e-8, ...
+    sprintf('warped cache moves the mean by %.3e', ...
+    max(abs(ptrust.mean - pclean.mean))));
 
 fprintf('=== done ===\n\n');
 
