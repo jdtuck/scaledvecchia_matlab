@@ -128,6 +128,27 @@ mreport('a current stamp is trusted, so the check can bite', ...
     sprintf('warped cache moves the mean by %.3e', ...
     max(abs(ptrust.mean - pclean.mean))));
 
+% ---- the calibration shape: one point, one draw -------------------------
+x1 = rand(1, d);
+[q1, mu1s, v1s] = obj.predict(x1, 'idxSamples', 7);
+mreport('one point and one index give exactly one draw', ...
+    isequal(size(q1), [1 1]) && isscalar(mu1s) && isscalar(v1s), ...
+    'np = 1, nsims = 1, with mean and variance alongside');
+
+mreport('the single-point draw is reproducible', ...
+    isequal(q1, obj.predict(x1, 'idxSamples', 7)), ...
+    'the calibration call is a fixed function of its input');
+
+% One index is one standard normal, so the standardized residual carries
+% across inputs.  This is the property the Metropolis ratio needs: holding
+% the index fixed makes the likelihood deterministic in theta.
+x2 = rand(1, d);
+[q2, mu2s, v2s] = obj.predict(x2, 'idxSamples', 7);
+z1 = (q1 - mu1s) / sqrt(v1s);
+z2 = (q2 - mu2s) / sqrt(v2s);
+mreport('one index is one standard normal across inputs', ...
+    abs(z1 - z2) < 1e-12, sprintf('z = %+.6f at both inputs', z1));
+
 fprintf('=== done ===\n\n');
 
 % ------------------------------------------------------------------------
