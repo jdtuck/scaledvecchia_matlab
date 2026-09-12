@@ -20,7 +20,9 @@ function pred = sv_predict(fit, inputs_pred, varargin)
 %     'scale'     'parms' / 'ranges' / 'none', as in SV_FIT
 %     'noise_free' predict the latent process rather than a fresh noisy
 %                 observation, i.e. drop the nugget from the target's own
-%                 variance (default true; irrelevant when the nugget is 0)
+%                 variance (default true; irrelevant when the nugget is 0).
+%                 Applies to joint = false only: the joint factor carries the
+%                 nugget on every diagonal entry
 %
 %   Output fields: .mean, and .var / .samples when requested.
 %

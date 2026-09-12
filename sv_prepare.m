@@ -23,6 +23,11 @@ function prep = sv_prepare(fit, inputs_pred, varargin)
 %           ...
 %       end
 %
+%   'noise_free' applies to the pointwise path only.  The joint path builds
+%   one Vecchia factor over the stacked observed and prediction points, whose
+%   blocks carry the nugget on every diagonal entry, so a joint plan always
+%   predicts a fresh noisy observation rather than the latent process.
+%
 %   The plan stays valid as long as FIT.PARMS and INPUTS_PRED are unchanged.
 %   The response values may change freely: pass a new vector to SV_DRAW with
 %   the 'y' option and the mean is recomputed from the cached weights, which
@@ -44,8 +49,9 @@ if isempty(o.scale)
 end
 
 % Observed-side quantities are the same for every prediction; build them once
-% if the fit does not already carry them (SV_FIT attaches them).
-if ~isfield(fit, 'cache') || isempty(fit.cache)
+% if the fit does not already carry them (SV_FIT attaches them), or again if
+% the parameters they were built from have moved since.
+if ~isfield(fit, 'cache') || isempty(fit.cache) || ~cache_current(fit)
     fit = sv_cache(fit);
 end
 cache = fit.cache;
@@ -156,6 +162,14 @@ end
 end
 
 % -------------------------------------------------------------------------
+function tf = cache_current(fit)
+% Two small-vector comparisons: cheap next to the neighbour search, and they
+% keep a hand-edited fit from predicting through a stale cache.
+c = fit.cache;
+tf = isfield(c, 'parms') && isequal(c.parms, fit.parms) ...
+    && isfield(c, 'beta') && isequal(c.beta, fit.beta);
+end
+
 function mu = pointwise_mean(S, NBR, resid, p)
 rsub = reshape(resid(NBR), size(NBR));
 mu = -sum(S(:,1:p-1) .* rsub, 2) ./ S(:,p);

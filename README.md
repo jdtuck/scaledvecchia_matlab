@@ -122,7 +122,7 @@ end
 or through the model object:
 
 ```matlab
-obj = obj.prepare(x_new);
+obj = obj.prepare(x_new);          % value class: keep the output
 for it = 1:niter
     s = obj.draw('nsims', 1);
 end
@@ -183,6 +183,27 @@ for it = 1:niter
     p = sv_predict(fit, [x_obs, theta], 'm', 100, 'joint', false, 'variance', true);
 end
 ```
+
+Through the model object, with the emulator uncertainty sampled inside the
+chain:
+
+```matlab
+for it = 1:niter
+    theta = propose();
+    k = draw_index();                       % which surrogate realization
+    s = obj.predict([x_obs, repmat(theta, nobs, 1)], 'idxSamples', k);
+end
+```
+
+`s` is `numel(k)`-by-`n_pred`, one row per realization, and the second and
+third outputs are the predictive mean and variance. Giving `idxSamples`
+explicitly freezes the realization: index `k` is backed by substream `k` of a
+seeded random stream, so it names the *same* surrogate draw at every
+evaluation and the likelihood is a fixed function of theta rather than a fresh
+random one each time the chain touches it. Without that, the Metropolis ratio
+compares likelihoods computed under different realizations. Pass `'crn',
+false` for independent draws, or omit `idxSamples` to just ask for `nsims`
+fresh ones.
 
 Rebuilding that per call meant re-scaling all `n` training rows and re-forming
 the residuals for a prediction that might involve a single point. Measured at

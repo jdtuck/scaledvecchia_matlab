@@ -9,6 +9,10 @@ function pred = sv_draw(prep, varargin)
 %                 with.  The cached Vecchia weights are reused, so this costs
 %                 O(n_pred * m) instead of a refactorization.
 %     'beta'      new mean coefficients to go with 'y'
+%     'z'         n_pred-by-nsims matrix of standard normals to use instead
+%                 of fresh ones.  Supplying them makes a draw reproducible,
+%                 which is what an MCMC needs when a sample index has to
+%                 name the same surrogate realization at every evaluation.
 %
 %   Output fields: .mean, and .var / .samples when requested.
 %
@@ -21,7 +25,8 @@ if ~isstruct(prep) || ~isfield(prep, 'is_prep')
     error('sv_draw:prep', 'first argument must come from sv_prepare.');
 end
 
-o = sv_options(struct('nsims', 0, 'variance', false, 'y', [], 'beta', []), varargin);
+o = sv_options(struct('nsims', 0, 'variance', false, 'y', [], 'beta', [], ...
+    'z', []), varargin);
 
 beta = prep.beta;
 if ~isempty(o.beta), beta = o.beta; end
@@ -56,7 +61,7 @@ if prep.joint
     pred.mean = pm + trendp;
 
     if o.nsims > 0
-        Z = randn(prep.np, o.nsims) * sqrt(prep.vcf);
+        Z = normals(o.z, prep.np, o.nsims) * sqrt(prep.vcf);
         sims_ord = mu_ord + (prep.UppT \ Z);
         S = zeros(prep.np, o.nsims);
         S(prep.ordp,:) = sims_ord;
@@ -83,7 +88,21 @@ else
         pred.var = prep.var;
     end
     if o.nsims > 0
-        pred.samples = pred.mean + sqrt(prep.var) .* randn(prep.np, o.nsims);
+        pred.samples = pred.mean + sqrt(prep.var) .* normals(o.z, prep.np, o.nsims);
     end
+end
+end
+
+% -------------------------------------------------------------------------
+function Z = normals(z, np, nsims)
+% Caller-supplied standard normals, or fresh ones.
+if isempty(z)
+    Z = randn(np, nsims);
+else
+    if ~isequal(size(z), [np nsims])
+        error('sv_draw:z', 'z must be %d-by-%d, got %s.', ...
+            np, nsims, mat2str(size(z)));
+    end
+    Z = z;
 end
 end
