@@ -23,7 +23,7 @@ np = 6;
 xq = rand(np, d);
 
 % ---- path 2: predict at arbitrary inputs --------------------------------
-[s1, mu1, v1] = obj.predict(xq, 'idxSamples', 7);
+s1 = obj.predict(xq, 'idxSamples', 7);
 mreport('predict returns nsims-by-npred', isequal(size(s1), [1 np]), ...
     sprintf('size %s', mat2str(size(s1))));
 
