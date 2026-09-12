@@ -228,6 +228,34 @@ end
 report('sv_nn matches a brute-force reference', agree, ...
     'exact conditioning sets on 3 configurations');
 
+% ---- 10. an unimportant input ------------------------------------------
+%      The point of the scaling: a range that grows past the spread of its
+%      input collapses that coordinate in the warped space, so the neighbour
+%      search and the covariance both stop seeing it.
+ni = 400; di = 3;
+Xi = rand(ni, di);
+yi = sin(3*Xi(:,1)) + 0.7*Xi(:,2).^2;          % x3 does nothing at all
+fi = sv_fit(Xi, yi, 'm', 20, 'nu', 2.5, 'nugget', 0, 'vcf', false);
+
+probe = [0.5 0.5 0.05; 0.5 0.5 0.95;           % x3 end to end
+         0.05 0.5 0.50; 0.50 0.5 0.50];        % x1 over half its range
+pm = sv_predict(fi.model, probe, 'm', 50, 'joint', false);
+sens3 = abs(pm.mean(2) - pm.mean(1));
+sens1 = abs(pm.mean(4) - pm.mean(3));
+report('an inert input barely moves the prediction', sens3 < 0.05 * sens1, ...
+    sprintf('x3 moves it %.2e, x1 moves it %.2e', sens3, sens1));
+
+% 'select' makes that explicit: once a range exceeds select x the spread of
+% its input, the input is frozen out of estimation entirely.
+spread = max(Xi, [], 1) - min(Xi, [], 1);
+fs = sv_fit(Xi, yi, 'm', 20, 'nu', 2.5, 'nugget', 0, 'vcf', false, ...
+    'ranges_ini', [0.3 0.3 20*spread(3)], 'select', 10);
+rr = fs.model.parms(2:di+1) ./ spread;
+ps = sv_predict(fs.model, probe, 'm', 50, 'joint', false);
+report('select freezes an input whose range outgrew its spread', ...
+    rr(3) > 1e8 && all(rr(1:2) < 1e8) && all(isfinite(ps.mean)), ...
+    sprintf('range/spread = %s', mat2str(rr, 3)));
+
 fprintf('=== done ===\n\n');
 
 % ------------------------------------------------------------------------
