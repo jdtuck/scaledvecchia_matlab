@@ -17,9 +17,11 @@ function fit = sv_cache(fit)
 %   Scaling the n observed inputs and forming the residuals is O(n*d) work per
 %   call for a prediction that may involve a single point.
 %
-%   SV_FIT calls this automatically, so a fitted model arrives ready.  Call it
-%   again yourself after changing FIT.parms, FIT.y or FIT.beta by hand; the
-%   cache is keyed to those and SV_PREDICT trusts it.
+%   SV_FIT calls this automatically, so a fitted model arrives ready.  The
+%   cache is stamped with FIT.parms and FIT.beta, so SV_PREPARE rebuilds it by
+%   itself if either moves.  FIT.y is not stamped -- checksumming it would cost
+%   the O(n) work the cache exists to avoid -- so call this again yourself
+%   after changing FIT.y by hand, or pass the new vector to SV_DRAW instead.
 %
 %   See also SV_PREPARE, SV_PREDICT.
 
@@ -46,6 +48,10 @@ switch lower(scale)
 end
 
 c = struct();
+% Stamp what the cache was built from, so a hand-edited fit is caught rather
+% than silently reused: .scales follows parms and .resid follows beta.
+c.parms  = fit.parms;
+c.beta   = fit.beta;
 c.scales = scales;
 c.ref    = fit.inputs .* scales;
 c.refsq  = sum(c.ref.^2, 2)';

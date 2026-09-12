@@ -96,6 +96,21 @@ end
 mreport('draw without prepare is an error', threw, ...
     'value-class prepare must be assigned');
 
+% ---- staleness: the plan and the observed-side cache follow parms --------
+obj3 = obj2;
+obj3.model.parms(2) = obj3.model.parms(2) * 1.5;
+sst = obj3.predict(xq, 'idxSamples', 7);
+mreport('a cached plan is dropped when parms move', ~isequal(sst, s1), ...
+    'prep.parms is compared against model.parms');
+
+fm = obj.model;
+fm.parms(2) = fm.parms(2) * 1.5;             % cache now stamped for old parms
+pa = sv_predict(fm, xq, 'm', 100, 'joint', false, 'variance', true);
+pb = sv_predict(sv_cache(fm), xq, 'm', 100, 'joint', false, 'variance', true);
+mreport('a stale observed-side cache is rebuilt', ...
+    max(abs(pa.mean - pb.mean)) < 1e-12 && max(abs(pa.var - pb.var)) < 1e-12, ...
+    sprintf('max mean diff %.3e', max(abs(pa.mean - pb.mean))));
+
 fprintf('=== done ===\n\n');
 
 % ------------------------------------------------------------------------

@@ -154,6 +154,7 @@ classdef sv_model
             tf = false;
             if isempty(obj.prep) || isempty(obj.prep_opts), return; end
             tf = obj.prep.joint == options.joint ...
+                && isequal(obj.prep.parms, obj.model.parms) ...
                 && isequal(obj.prep.m, options.m) ...
                 && isequal(obj.prep.noise_free, options.noise_free) ...
                 && isequal(obj.prep_opts.scale, options.scale) ...
@@ -201,7 +202,7 @@ classdef sv_model
             args = {'nsims', ns, 'variance', want_var, ...
                 'y', options.y, 'beta', options.beta};
             if crn
-                args = [args, {'z', obj.normals(p.np, idx)}];
+                args = [args, {'z', sv_model.normals(obj.seed, p.np, idx)}];
             end
             s = sv_draw(p, args{:});
 
@@ -209,11 +210,24 @@ classdef sv_model
             mu = s.mean;
             if isfield(s, 'var'), v = s.var; else, v = []; end
         end
+    end
 
-        function Z = normals(obj, np, idx)
+    methods (Static, Access = private)
+        function Z = normals(seed, np, idx)
             % One fixed standard-normal vector per sample index: substream k
             % of a seeded stream, so index k always means the same draw.
-            st = RandStream('Threefry', 'Seed', obj.seed);
+            %
+            % The stream is built once and kept.  A RandStream construction
+            % per call would land on the calibration path, where a whole
+            % single-point prediction is 0.58 ms.  Assigning Substream
+            % rewinds to the start of that substream, which is what makes
+            % the same index reproducible -- sv_model_test asks for the same
+            % index twice in a row and so pins that behaviour.
+            persistent st stseed
+            if isempty(st) || ~isequal(stseed, seed)
+                st = RandStream('Threefry', 'Seed', seed);
+                stseed = seed;
+            end
             Z = zeros(np, numel(idx));
             for j = 1:numel(idx)
                 st.Substream = idx(j);
