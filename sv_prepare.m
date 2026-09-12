@@ -23,6 +23,11 @@ function prep = sv_prepare(fit, inputs_pred, varargin)
 %           ...
 %       end
 %
+%   'noise_free' applies to the pointwise path only.  The joint path builds
+%   one Vecchia factor over the stacked observed and prediction points, whose
+%   blocks carry the nugget on every diagonal entry, so a joint plan always
+%   predicts a fresh noisy observation rather than the latent process.
+%
 %   The plan stays valid as long as FIT.PARMS and INPUTS_PRED are unchanged.
 %   The response values may change freely: pass a new vector to SV_DRAW with
 %   the 'y' option and the mean is recomputed from the cached weights, which
