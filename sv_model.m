@@ -113,7 +113,7 @@ classdef sv_model
             [pred, mu, v] = obj.sample_from(obj.prep, idx, crn, options);
         end
 
-        function pred = predict(obj, x_new, options)
+        function [pred, mu, v] = predict(obj, x_new, options)
             % PREDICT  Draws at arbitrary inputs, building the plan as needed.
             arguments
                 obj
