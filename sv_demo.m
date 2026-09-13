@@ -74,7 +74,7 @@ ytest = sv_borehole(inputs_test);
 fprintf('response range [%.1f, %.1f], sd %.2f\n\n', min(y), max(y), std(y));
 
 t0 = tic;
-fit = sv_fit(inputs, y, 'm', m, 'nu', 3.5, 'nugget', 0, 'scale', 'parms');
+fit = sv_fit(inputs, y, 'm', m, 'nu', 3.5, 'nugget', 'estimate', 'scale', 'parms');
 tfit = toc(t0);
 
 t1 = tic;
