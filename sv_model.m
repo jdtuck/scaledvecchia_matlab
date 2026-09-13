@@ -155,7 +155,7 @@ classdef sv_model
                 options.m = 100
                 options.joint = false
                 options.variance = true
-                options.noise_free = false
+                options.noise_free = true
                 options.scale = []
                 options.X_pred = []
                 options.crn = true
