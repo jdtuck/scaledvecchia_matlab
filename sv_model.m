@@ -71,7 +71,7 @@ classdef sv_model
     end
 
     methods
-        function s = get_residSD(obj)
+        function s = get.residSD(obj)
             % RESIDSD  Noise standard deviation, on the scale of the response.
             %
             %   The nugget is relative -- sv_covblocks puts variance*nugget on
@@ -103,7 +103,7 @@ classdef sv_model
             obj.model = model;
             obj.nSamples = nSamples;
             obj.seed = options.seed;
-            obj.samples.residSD = obj.get_residSD().*ones(nSamples,1);
+            obj.samples.residSD = obj.residSD().*ones(nSamples,1);
         end
 
         function obj = prepare(obj, x_new, options)
